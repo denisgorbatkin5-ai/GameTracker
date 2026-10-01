@@ -76,6 +76,7 @@ export interface Profile {
   display_name: string | null;
   bio: string | null;
   avatar_url: string | null;
+  banner_url: string | null;
   accent: string;
   is_public: boolean;
   created_at: string;
@@ -167,6 +168,10 @@ export interface SteamGameLite {
   metacritic: number | null;
   price: string | null;
   platforms: string[];
+  /** 'game' | 'dlc' | 'demo' | ... - used to keep DLC out of the top of search results */
+  type?: string;
+  /** total Steam reviews, used as a popularity signal in search */
+  reviews?: number;
 }
 
 export interface FeaturedLists {

@@ -28,7 +28,9 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
   saveProfile: (
-    patch: Partial<Pick<Profile, 'display_name' | 'bio' | 'avatar_url' | 'accent' | 'is_public' | 'username'>>,
+    patch: Partial<
+      Pick<Profile, 'display_name' | 'bio' | 'avatar_url' | 'banner_url' | 'accent' | 'is_public' | 'username'>
+    >,
   ) => Promise<void>;
   refreshProfile: () => Promise<void>;
 }

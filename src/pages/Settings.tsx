@@ -4,6 +4,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  Image as ImageIcon,
   Layers,
   LogOut,
   Palette,
@@ -220,6 +221,7 @@ export function Settings() {
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '');
   const [bio, setBio] = useState(profile?.bio ?? '');
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? '');
+  const [bannerUrl, setBannerUrl] = useState(profile?.banner_url ?? '');
   const [accent, setAccent] = useState(profile?.accent ?? '#8b5cf6');
   const [isPublic, setIsPublic] = useState(profile?.is_public ?? true);
   const [busy, setBusy] = useState(false);
@@ -267,6 +269,7 @@ export function Settings() {
         display_name: displayName.trim() || null,
         bio: bio.trim() || null,
         avatar_url: avatarUrl.trim() || null,
+        banner_url: bannerUrl.trim() || null,
         accent,
         is_public: isPublic,
       });
@@ -287,14 +290,23 @@ export function Settings() {
       />
 
       <div className="space-y-4">
-        <div className="surface relative overflow-hidden rounded-3xl p-6">
-          <div
-            className="absolute inset-0 opacity-25"
-            style={{ background: `radial-gradient(80% 120% at 10% 0%, ${accent}66, transparent)` }}
-          />
-          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+        <div className="surface relative overflow-hidden rounded-3xl">
+          <div className="relative h-24 overflow-hidden sm:h-32">
+            {bannerUrl ? (
+              <img src={bannerUrl} alt="" className="size-full object-cover" />
+            ) : (
+              <div
+                className="size-full"
+                style={{
+                  background: `linear-gradient(115deg, ${accent} 0%, #1e1b4b 45%, #0e7490 100%)`,
+                }}
+              />
+            )}
+            <div className="absolute inset-0 bg-linear-to-t from-[#0b0b14] via-[#0b0b14]/30 to-transparent" />
+          </div>
+          <div className="relative flex flex-col gap-5 px-6 pb-6 sm:flex-row sm:items-end">
             <div
-              className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-2xl font-bold text-white shadow-2xl"
+              className="-mt-12 flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-[#0b0b14] text-2xl font-bold text-white shadow-2xl"
               style={{ background: `linear-gradient(135deg, ${accent}, #22d3ee)` }}
             >
               {avatarUrl ? (
@@ -303,7 +315,7 @@ export function Settings() {
                 initials(displayName || profile?.username || 'GT')
               )}
             </div>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 sm:pb-1">
               <div className="font-display text-xl font-semibold text-white">
                 {displayName || profile?.username}
               </div>
@@ -375,6 +387,47 @@ export function Settings() {
                 onChange={(event) => setAvatarUrl(event.target.value)}
                 placeholder="https://…"
               />
+            </Field>
+
+            <Field
+              label="Фон профиля"
+              hint=" широкий баннер, как в Steam — можно ссылку на обложку игры"
+            >
+              <div className="space-y-2.5">
+                <div className="relative h-24 overflow-hidden rounded-xl border border-white/10">
+                  {bannerUrl ? (
+                    <img src={bannerUrl} alt="" className="size-full object-cover" />
+                  ) : (
+                    <div
+                      className="size-full"
+                      style={{
+                        background: `linear-gradient(115deg, ${accent} 0%, #1e1b4b 45%, #0e7490 100%)`,
+                      }}
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-linear-to-t from-[#0b0b14]/70 to-transparent" />
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={bannerUrl}
+                    onChange={(event) => setBannerUrl(event.target.value)}
+                    placeholder="https://…"
+                    icon={<ImageIcon className="size-4" />}
+                  />
+                  {bannerUrl ? (
+                    <Button variant="secondary" onClick={() => setBannerUrl('')}>
+                      Убрать
+                    </Button>
+                  ) : null}
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Подойдёт любая картинка: обложка из Steam (например{' '}
+                  <span className="font-mono text-slate-400">
+                    https://cdn.cloudflare.steamstatic.com/steam/apps/292030/library_600x900.jpg
+                  </span>
+                  ) или своя картинка по прямой ссылке.
+                </p>
+              </div>
             </Field>
 
             <Field label="Цвет акцента">

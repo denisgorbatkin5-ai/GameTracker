@@ -32,7 +32,12 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
 
 export async function updateProfile(
   userId: string,
-  patch: Partial<Pick<Profile, 'display_name' | 'bio' | 'avatar_url' | 'accent' | 'is_public' | 'username'>>,
+  patch: Partial<
+    Pick<
+      Profile,
+      'display_name' | 'bio' | 'avatar_url' | 'banner_url' | 'accent' | 'is_public' | 'username'
+    >
+  >,
 ): Promise<Profile> {
   const { data, error } = await supabase
     .from('profiles')

@@ -156,21 +156,50 @@ export function PublicProfile() {
 
   return (
     <PageShell>
-      <div className="surface relative mb-6 overflow-hidden rounded-3xl p-6 sm:p-8">
-        <div
-          className="absolute inset-0 opacity-30"
-          style={{
-            background: `radial-gradient(90% 120% at 15% 0%, ${profile.accent}55, transparent)`,
-          }}
-        />
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+      <div className="surface relative mb-6 overflow-hidden rounded-3xl">
+        {/* Steam-like banner: profile art on top, identity block hanging below it */}
+        <div className="relative h-32 overflow-hidden sm:h-44">
+          {profile.banner_url ? (
+            <>
+              <img
+                src={profile.banner_url}
+                alt=""
+                className="size-full object-cover"
+                onError={(event) => {
+                  event.currentTarget.style.display = 'none';
+                }}
+              />
+              <div className="absolute inset-0 bg-linear-to-t from-[#0b0b14] via-[#0b0b14]/35 to-transparent" />
+            </>
+          ) : (
+            <div
+              className="size-full"
+              style={{
+                background: `linear-gradient(115deg, ${profile.accent} 0%, #1e1b4b 45%, #0e7490 100%)`,
+              }}
+            />
+          )}
           <div
-            className="flex size-20 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold text-white shadow-2xl"
+            className="absolute inset-0 opacity-40 mix-blend-overlay"
+            style={{
+              background:
+                'radial-gradient(70% 120% at 15% 0%, rgba(255,255,255,0.25), transparent 60%)',
+            }}
+          />
+        </div>
+
+        <div className="relative flex flex-col gap-5 px-6 pb-6 sm:flex-row sm:items-end sm:px-8 sm:pb-8">
+          <div
+            className="-mt-12 flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-[#0b0b14] text-3xl font-bold text-white shadow-2xl sm:-mt-16 sm:size-28"
             style={{ background: `linear-gradient(135deg, ${profile.accent}, #22d3ee)` }}
           >
-            {initials(profile.display_name ?? profile.username)}
+            {profile.avatar_url ? (
+              <img src={profile.avatar_url} alt="" className="size-full object-cover" />
+            ) : (
+              initials(profile.display_name ?? profile.username)
+            )}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 sm:pb-1">
             <h1 className="font-display text-2xl font-bold text-white sm:text-3xl">
               {profile.display_name ?? profile.username}
             </h1>
@@ -286,7 +315,8 @@ export function PublicProfile() {
                       {entry.game.name}
                     </div>
                     <div className="truncate text-[11px] text-slate-400">
-                      {entry.game.developers.slice(0, 2).join(', ') || entry.game.genres.slice(0, 2).join(', ')}
+                      {(entry.game.developers ?? []).slice(0, 2).join(', ') ||
+                        (entry.game.genres ?? []).slice(0, 2).join(', ')}
                     </div>
                   </div>
                 </motion.div>
@@ -411,7 +441,7 @@ export function PublicProfile() {
                       {item.game.name}
                     </div>
                     <div className="mt-0.5 text-[11px] text-slate-500">
-                      {item.game.genres.slice(0, 2).join(', ') || '—'}
+                      {(item.game.genres ?? []).slice(0, 2).join(', ') || '—'}
                     </div>
                     <div className="mt-auto flex items-center gap-2 pt-1">
                       <StatusBadge status={item.status} />
