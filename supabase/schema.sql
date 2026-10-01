@@ -679,3 +679,364 @@ with check (
     where r.id = tier_row_id and t.user_id = auth.uid()
   )
 );
+
+-- ---------------------------------------------------------------------------
+-- Steam proxy (static hosting friendly)
+--
+-- store.steampowered.com answers without any Access-Control-Allow-Origin header,
+-- so a browser can never call it directly, and GitHub Pages has no serverless
+-- runtime to hide behind. The `http` extension turns Postgres into the proxy:
+-- one RPC that works from every host, with plpgsql-http caching responses in the
+-- backend (http_curl_ttl, 6h by default) so identical lookups cost nothing.
+-- ---------------------------------------------------------------------------
+
+create extension if not exists http;
+
+/** Percent-encodes UTF-8 bytes so Cyrillic search terms survive the trip into a URL. */
+create or replace function public.steam_url_encode(raw text)
+returns text
+language sql
+immutable
+as $$
+  with source as (
+    select convert_to(coalesce(raw, ''), 'UTF8') as bytes
+  ),
+  octets as (
+    select i, get_byte(source.bytes, i) as code
+    from source,
+      generate_series(0, octet_length(source.bytes) - 1) as i
+  )
+  select coalesce(
+    string_agg(
+      case
+        when code in (45, 46, 95, 126)
+          or code between 48 and 57
+          or code between 65 and 90
+          or code between 97 and 122
+          then chr(code)
+        else '%' || upper(lpad(to_hex(code), 2, '0'))
+      end,
+      '' order by i
+    ),
+    ''
+  )
+  from octets;
+$$;
+
+create or replace function public.steam_release_date(raw text)
+returns text
+language plpgsql
+immutable
+as $$
+declare
+  parts text[];
+  day text;
+  month text;
+  year text;
+  months_en text[] := array['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  months_ru text[] := array['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  idx int;
+begin
+  if raw is null or btrim(raw) = '' then
+    return null;
+  end if;
+
+  -- "May 18, 2015" and "18 May, 2015" both show up, depending on the store language
+  parts := regexp_match(btrim(raw), '^([A-Za-zа-яА-Я]{3,})\.?\s+(\d{1,2}),?\s+(\d{4})$');
+  if parts is not null then
+    month := lower(left(parts[1], 3));
+    day := parts[2];
+    year := parts[3];
+  else
+    parts := regexp_match(btrim(raw), '^(\d{1,2})\s+([A-Za-zа-яА-Я]{3,})\.?,?\s+(\d{4})$');
+    if parts is null then
+      return null;
+    end if;
+    day := parts[1];
+    month := lower(left(parts[2], 3));
+    year := parts[3];
+  end if;
+
+  idx := array_position(months_en, month);
+  if idx is null then
+    idx := array_position(months_ru, month);
+  end if;
+  if idx is null and right(month, 1) = 'я' then
+    -- Russian dates use the genitive form: "мая" -> "май", "июня" -> "июн"
+    idx := array_position(months_ru, left(month, 2) || 'й');
+  end if;
+  if idx is null then
+    return null;
+  end if;
+
+  return format('%s-%s-%s', year, lpad(idx::text, 2, '0'), lpad(day, 2, '0'));
+end;
+$$;
+
+
+create or replace function public.steam_price(raw jsonb)
+returns text
+language plpgsql
+immutable
+as $$
+declare
+  initial numeric;
+  final_price numeric;
+  discount int;
+begin
+  if raw is null then
+    return null;
+  end if;
+  initial := nullif(raw ->> 'initial', '')::numeric;
+  final_price := nullif(raw ->> 'final', '')::numeric;
+  discount := coalesce(nullif(raw ->> 'discount_percent', '')::int, 0);
+  if final_price is null then
+    return null;
+  end if;
+  if discount > 0 and initial is not null then
+    return format('$%s -> $%s', to_char(initial / 100, 'FM99990.00'), to_char(final_price / 100, 'FM99990.00'));
+  end if;
+  return '$' || to_char(final_price / 100, 'FM99990.00');
+end;
+$$;
+
+create or replace function public.steam_platforms(raw jsonb)
+returns jsonb
+language sql
+immutable
+as $$
+  select coalesce(
+    (
+      select jsonb_agg(
+        case x.key
+          when 'windows' then 'Windows'
+          when 'mac' then 'macOS'
+          when 'linux' then 'Linux'
+        end
+        order by x.key
+      )
+      from jsonb_each_text(coalesce(raw, '{}'::jsonb)) as x(key, value)
+      where x.value = 'true'
+        and x.key in ('windows', 'mac', 'linux')
+    ),
+    '[]'::jsonb
+  );
+$$;
+
+create or replace function public.steam_featured_group(root jsonb, p_group text)
+returns jsonb
+language sql
+immutable
+as $$
+  with items as (
+    select x.item, x.ord
+    from jsonb_array_elements(coalesce(root -> p_group -> 'items', '[]'::jsonb))
+      with ordinality as x(item, ord)
+    where (x.item ->> 'id') ~ '^[0-9]+$'
+      and (x.item ->> 'id')::bigint > 0
+      and coalesce(x.item ->> 'name', '') <> ''
+  ),
+  unique_items as (
+    select distinct on ((item ->> 'id')::bigint) item, ord
+    from items
+    order by (item ->> 'id')::bigint, ord
+  )
+  select coalesce(
+    (
+      select jsonb_agg(
+        jsonb_build_object(
+          'appid', (item ->> 'id')::bigint,
+          'name', item ->> 'name',
+          'header', coalesce(
+            item ->> 'header_image',
+            item ->> 'large_capsule_image',
+            format('https://cdn.cloudflare.steamstatic.com/steam/apps/%s/header.jpg', (item ->> 'id')::bigint)
+          )
+        )
+        order by ord
+      )
+      from (select * from unique_items order by ord limit 18) top
+    ),
+    '[]'::jsonb
+  );
+$$;
+
+/**
+ * One entry point for Steam on hosts without a server runtime.
+ *
+ * p_path = 'search'   -> { "results": [{ appid, name, icon, logo }] }
+ * p_path = 'app'      -> { "game": SteamGameLite | null }
+ * p_path = 'featured' -> { "topSellers": [...], "specials": [...], "newReleases": [...] }
+ *
+ * Only these three paths exist, so the function can never be turned into an open
+ * proxy for arbitrary URLs.
+ */
+create or replace function public.steam_fetch(p_path text, p_q text default null, p_id bigint default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  term text := left(btrim(coalesce(p_q, '')), 80);
+  encoded text;
+  non_ascii boolean;
+  primary_status int := 0;
+  primary_content text;
+  secondary_status int := 0;
+  secondary_content text;
+  http_status int := 0;
+  http_content text;
+  root jsonb;
+  data jsonb;
+  results jsonb;
+begin
+  if p_path is null or p_path not in ('search', 'app', 'featured') then
+    raise exception 'unknown steam path: %', p_path using errcode = '22023';
+  end if;
+
+  if p_path = 'search' then
+    if char_length(term) < 2 then
+      return jsonb_build_object('results', '[]'::jsonb);
+    end if;
+
+    -- percent-encode the query so Cyrillic titles reach Steam intact
+    encoded := public.steam_url_encode(term);
+
+    -- Steam matches against the titles of the store it serves, so a Cyrillic query only
+    -- finds anything on the RU store (cc=RU) and a Latin one needs the full US catalogue
+    -- (cc=US). Whichever pass matches the script of the query is ranked first.
+    non_ascii := octet_length(term) > char_length(term);
+
+    if non_ascii then
+      select s.status, s.content into primary_status, primary_content
+      from http_get(format('https://store.steampowered.com/api/storesearch/?term=%s&l=russian&cc=RU', encoded)) s;
+
+      select s.status, s.content into secondary_status, secondary_content
+      from http_get(format('https://store.steampowered.com/api/storesearch/?term=%s&l=english&cc=US', encoded)) s;
+    else
+      select s.status, s.content into primary_status, primary_content
+      from http_get(format('https://store.steampowered.com/api/storesearch/?term=%s&l=english&cc=US', encoded)) s;
+
+      select s.status, s.content into secondary_status, secondary_content
+      from http_get(format('https://store.steampowered.com/api/storesearch/?term=%s&l=russian&cc=RU', encoded)) s;
+    end if;
+
+    with primary_items as (
+      select (x.item ->> 'id')::bigint as appid,
+             x.item ->> 'name' as name,
+             coalesce(x.item ->> 'tiny_image', x.item ->> 'logo') as icon,
+             x.ord
+      from jsonb_array_elements(
+             case when primary_status = 200
+                  then coalesce((primary_content::jsonb) -> 'items', '[]'::jsonb)
+                  else '[]'::jsonb end
+           ) with ordinality as x(item, ord)
+      where (x.item ->> 'id') ~ '^[0-9]+$'
+        and (x.item ->> 'id')::bigint > 0
+        and coalesce(x.item ->> 'name', '') <> ''
+    ),
+    secondary_items as (
+      select (x.item ->> 'id')::bigint as appid,
+             x.item ->> 'name' as name,
+             coalesce(x.item ->> 'tiny_image', x.item ->> 'logo') as icon,
+             x.ord
+      from jsonb_array_elements(
+             case when secondary_status = 200
+                  then coalesce((secondary_content::jsonb) -> 'items', '[]'::jsonb)
+                  else '[]'::jsonb end
+           ) with ordinality as x(item, ord)
+      where (x.item ->> 'id') ~ '^[0-9]+$'
+        and (x.item ->> 'id')::bigint > 0
+        and coalesce(x.item ->> 'name', '') <> ''
+    ),
+    merged as (
+      -- the secondary pass only adds titles the primary index does not know about
+      select appid, name, icon, ord from primary_items
+      union all
+      select s.appid, s.name, s.icon, 100000 + s.ord
+      from secondary_items s
+      where not exists (select 1 from primary_items p where p.appid = s.appid)
+    )
+    select coalesce(
+
+             (
+               select jsonb_agg(
+                        jsonb_build_object('appid', appid, 'name', name, 'icon', icon, 'logo', icon)
+                        order by ord
+                      )
+               from (select * from merged order by ord limit 24) top
+             ),
+             '[]'::jsonb
+           )
+      into results;
+
+    return jsonb_build_object('results', results);
+  end if;
+
+  if p_path = 'app' then
+    if p_id is null or p_id <= 0 then
+      return jsonb_build_object('game', null);
+    end if;
+
+    select s.status, s.content into http_status, http_content
+    from http_get(format(
+      'https://store.steampowered.com/api/appdetails?appids=%s&cc=us&l=english',
+      p_id
+    )) s;
+
+    if http_status <> 200 then
+      return jsonb_build_object('game', null);
+    end if;
+
+    data := (http_content::jsonb) -> (p_id::text) -> 'data';
+    if data is null or jsonb_typeof(data) <> 'object' then
+      return jsonb_build_object('game', null);
+    end if;
+
+    return jsonb_build_object(
+      'game',
+      jsonb_build_object(
+        'steamAppid', p_id,
+        'name', coalesce(data ->> 'name', 'Unknown'),
+        'headerImage', format('https://cdn.cloudflare.steamstatic.com/steam/apps/%s/header.jpg', p_id),
+        'capsuleImage', format('https://cdn.cloudflare.steamstatic.com/steam/apps/%s/capsule_616x353.jpg', p_id),
+        'libraryImage', format('https://cdn.cloudflare.steamstatic.com/steam/apps/%s/library_600x900.jpg', p_id),
+        'backgroundImage', format('https://cdn.cloudflare.steamstatic.com/steam/apps/%s/page_bg.jpg', p_id),
+        'releaseDate', public.steam_release_date(data #>> '{release_date,date}'),
+        'developers', coalesce(data -> 'developers', '[]'::jsonb),
+        'publishers', coalesce(data -> 'publishers', '[]'::jsonb),
+        'genres', coalesce(
+          (
+            select jsonb_agg(genre ->> 'description' order by ord)
+            from jsonb_array_elements(coalesce(data -> 'genres', '[]'::jsonb))
+              with ordinality as g(genre, ord)
+          ),
+          '[]'::jsonb
+        ),
+        'shortDescription', coalesce(data ->> 'short_description', data ->> 'about_the_game', ''),
+        'metacritic', nullif(data #>> '{metacritic,score}', '')::numeric,
+        'price', public.steam_price(data -> 'price_overview'),
+        'platforms', public.steam_platforms(data -> 'platforms')
+      )
+    );
+  end if;
+
+  select s.status, s.content into http_status, http_content
+  from http_get('https://store.steampowered.com/api/featuredcategories?cc=us&l=english') s;
+
+  if http_status <> 200 then
+    return null;
+  end if;
+
+  root := http_content::jsonb;
+  return jsonb_build_object(
+    'topSellers', public.steam_featured_group(root, 'top_sellers'),
+    'specials', public.steam_featured_group(root, 'specials'),
+    'newReleases', public.steam_featured_group(root, 'new_releases')
+  );
+end;
+$$;
+
+revoke all on function public.steam_fetch(text, text, bigint) from public;
+grant execute on function public.steam_fetch(text, text, bigint) to anon, authenticated;

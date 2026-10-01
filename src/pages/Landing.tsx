@@ -71,7 +71,9 @@ export function Landing() {
   const [activeSection, setActiveSection] = useState(0);
 
   useEffect(() => {
-    void fetchFeatured().then(setFeatured);
+    void fetchFeatured()
+      .then(setFeatured)
+      .catch(() => setFeatured(null));
   }, []);
 
   const trending = useMemo(() => featured?.topSellers.slice(0, 10) ?? [], [featured]);

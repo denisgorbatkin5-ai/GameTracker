@@ -1,18 +1,17 @@
+import { supabase } from './supabase';
 import type { FeaturedLists, SteamGameLite } from './types';
-import {
-  getAppDetails,
-  getFeatured,
-  headerImage,
-  searchApps,
-  type SteamGame,
-  type SteamSearchResult,
-} from '../../server/steam-core';
+import { steamHeader } from './utils';
 
-const TIMEOUT = 15000;
+const TIMEOUT = 20000;
 /**
- * The /api/steam proxy only exists on hosts that run a serverless function (Vercel, local
- * dev). On static hosting the route 404s, so we remember that and talk to Steam directly -
- * it sends Access-Control-Allow-Origin: * and needs no key.
+ * Steam sends no CORS headers, so a browser can never call it directly. Two transports
+ * are tried in order:
+ *
+ * 1. `/api/steam` - the Vercel/local-dev serverless proxy, when the host runs one;
+ * 2. the `steam_fetch` RPC - Postgres proxies Steam through the `http` extension, which
+ *    works from any static host such as GitHub Pages.
+ *
+ * The probe timeout is short so a static host does not delay every search.
  */
 const PROBE_TIMEOUT = 2500;
 let proxyUsable = true;
@@ -25,7 +24,7 @@ async function getJson<T>(url: string, signal?: AbortSignal, timeout = TIMEOUT):
   }
   try {
     const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) throw new Error(`Steam responded ${res.status}`);
+    if (!res.ok) throw new Error(`upstream responded ${res.status}`);
     return (await res.json()) as T;
   } finally {
     clearTimeout(timer);
@@ -42,6 +41,19 @@ async function viaProxy<T>(path: string, signal?: AbortSignal): Promise<T | null
   }
 }
 
+async function viaDatabase<T>(
+  p_path: 'search' | 'app' | 'featured',
+  p_q: string | null,
+  p_id: number | null,
+  signal?: AbortSignal,
+): Promise<T> {
+  const query = supabase.rpc('steam_fetch', { p_path, p_q, p_id });
+  if (signal) query.abortSignal(signal);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data as T;
+}
+
 export interface SteamSearchHit {
   appid: number;
   name: string;
@@ -51,7 +63,7 @@ export interface SteamSearchHit {
 }
 
 function toHit(appid: number, name: string, image: string | null): SteamSearchHit {
-  return { appid, name, header: headerImage(appid), icon: image, logo: image };
+  return { appid, name, header: steamHeader(appid), icon: image, logo: image };
 }
 
 export async function searchSteam(
@@ -61,54 +73,30 @@ export async function searchSteam(
   const query = term.trim();
   if (query.length < 2) return [];
 
-  const proxied = await viaProxy<{ results: SteamSearchResult[] }>(
+  const proxied = await viaProxy<{ results: { appid: number; name: string; icon?: string | null; logo?: string | null }[] }>(
     `/search?q=${encodeURIComponent(query)}`,
     signal,
   );
-  const results = proxied?.results ?? (await searchApps(query));
-  return results.map((hit) => toHit(Number(hit.appid), hit.name, hit.icon ?? hit.logo ?? null));
+  const payload =
+    proxied ?? (await viaDatabase<{ results: { appid: number; name: string; icon?: string | null; logo?: string | null }[] }>('search', query, null, signal));
+
+  return (payload?.results ?? []).map((hit) =>
+    toHit(Number(hit.appid), hit.name, hit.icon ?? hit.logo ?? null),
+  );
 }
 
 export async function fetchGame(appid: number): Promise<SteamGameLite | null> {
-  try {
-    const proxied = await viaProxy<{ game: SteamGameLite | null }>(`/app?id=${appid}`);
-    if (proxied) return proxied.game ?? null;
-    return (await getAppDetails(appid)) as SteamGameLite | null;
-  } catch {
-    return null;
-  }
-}
-
-export async function fetchGames(appids: number[]): Promise<SteamGameLite[]> {
-  if (appids.length === 0) return [];
-  try {
-    const proxied = await viaProxy<{ games: SteamGameLite[] }>(
-      `/apps?ids=${appids.slice(0, 40).join(',')}`,
-    );
-    if (proxied) return proxied.games ?? [];
-    const games = await Promise.all(appids.slice(0, 40).map((id) => getAppDetails(id)));
-    return games.filter(Boolean) as SteamGameLite[];
-  } catch {
-    return [];
-  }
+  const proxied = await viaProxy<{ game: SteamGameLite | null }>(`/app?id=${appid}`);
+  if (proxied) return proxied.game ?? null;
+  const payload = await viaDatabase<{ game: SteamGameLite | null }>('app', null, appid);
+  return payload?.game ?? null;
 }
 
 export async function fetchFeatured(): Promise<FeaturedLists | null> {
-  try {
-    const proxied = await viaProxy<FeaturedLists>('/featured');
-    if (proxied) return proxied;
-    const lists = (await getFeatured()) as FeaturedListShape;
-    return lists;
-  } catch {
-    return null;
-  }
+  const proxied = await viaProxy<FeaturedLists>('/featured');
+  if (proxied) return proxied;
+  return await viaDatabase<FeaturedLists>('featured', null, null);
 }
-
-type FeaturedListShape = {
-  topSellers: FeaturedLists['topSellers'];
-  specials: FeaturedLists['specials'];
-  newReleases: FeaturedLists['newReleases'];
-};
 
 const memory = new Map<string, SteamGameLite>();
 
@@ -121,4 +109,4 @@ export function cachedGame(appid: number): SteamGameLite | undefined {
   return memory.get(String(appid));
 }
 
-export type { SteamGame };
+export type { SteamGameLite };

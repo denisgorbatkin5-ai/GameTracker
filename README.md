@@ -56,14 +56,15 @@ Steam, аккаунты и синхронизация — Supabase.
 React SPA (Vite, TS, Tailwind)
 ├── useAuth / useLibrary / useFriends        — состояние на контекстах
 ├── lib/api.ts                              — Supabase + SQL RPC
-└── lib/steam.ts                            — proxy-first, direct Steam fallback
+└── lib/steam.ts                            — proxy-first, Steam RPC fallback
 
 Postgres / Supabase
 ├── RLS: коллекция и категории — только владелец
 ├── RLS: тир-листы — владелец + все (если is_public / friends_visible)
-└── security-definer RPC                    — can_view_profile, profile_collection,
-                                              profile_showcase_games, add_friend,
-                                              respond_friend, username_available
+├── security-definer RPC                    — can_view_profile, profile_collection,
+│                                              profile_showcase_games, add_friend,
+│                                              respond_friend, username_available
+└── steam_fetch RPC + http extension        — CORS-прокси к Steam для статических хостов
 
 Steam Web API
 └── server/steam-core.ts                    — общая логика + кэш в памяти 30 мин
@@ -131,27 +132,41 @@ npm run migrate    # применить автоматически через pg
 
 ## Steam API
 
-Steam не отдаёт CORS-заголовки, поэтому запросы идут через прокси, а если его нет (статический хостинг) —
-напрямую с клиента:
+Steam-магазин **не отдаёт CORS-заголовки**, поэтому браузер не может обратиться к нему напрямую —
+проверено: `store.steampowered.com/api/*` отвечает без `Access-Control-Allow-Origin`. Нужен прокси,
+и их два:
 
-- локально — `plugins/steamApiPlugin.ts`
-- на Vercel — serverless `api/steam.ts`
-- на GitHub Pages — прямые запросы к Steam из `src/lib/steam.ts`
+1. **Serverless-прокси** — когда хост умеет serverless-функции:
+   - локально — `plugins/steamApiPlugin.ts`;
+   - на Vercel — `api/steam.ts`.
+2. **Прокси на стороне Postgres** — работает на любом статическом хостинге, включая GitHub Pages:
+   расширение `http` делает запрос из базы, а RPC `steam_fetch(text, text, bigint)` отдаёт
+   нормализованный JSON клиенту.
 
-Общая логика и кэш в памяти (30 мин) — `server/steam-core.ts`.
+Клиент пробует `/api/steam`, при 404 переключается на RPC и больше не тратит время на попытки.
+plpgsql-http кэширует ответы в коннекте (`http_curl_ttl`, 6 часов), поэтому повторные запросы
+бесплатны. Общая логика нормализации — `server/steam-core.ts`.
 
-| Endpoint | Назначение |
+| `p_path` | Ответ |
 | --- | --- |
-| `GET /api/steam/search?q=` | поиск по названию (русский + английский) |
-| `GET /api/steam/app?id=` | метаданные игры |
-| `GET /api/steam/apps?ids=1,2,3` | пачка метаданных (до 40) |
-| `GET /api/steam/featured` | топ продаж / скидки / новинки |
+| `search` | `{ "results": [{ appid, name, icon, logo }] }` — до 24, русский + английский проход |
+| `app` | `{ "game": SteamGameLite \| null }` — цена, жанры, платформы, Metacritic, дата выхода |
+| `featured` | `{ "topSellers": [...], "specials": [...], "newReleases": [...] }` — по 18 игр |
+
+Любой другой `p_path` отклоняется, так что RPC нельзя превратить в открытый прокси.
+
+> Steam ищет по названиям того магазина, который отдаёт: кириллица находится только в российском
+> каталоге (`cc=RU`), латиница — в полном американском (`cc=US`). Поэтому поиск делает два
+> прохода и ранжирует тот, который соответствует языку запроса.
+
+Обложки игр отдаются с CDN Steam (`cdn.cloudflare.steamstatic.com`) и не требуют прокси.
 
 ## Тесты и проверки
 
 ```bash
 npm run build       # tsc -b + production-сборка
 npm run verify:rls  # 40 проверок RLS/RPC на живой базе
+npm run check:steam # поиск / карточка / топы через steam_fetch RPC
 ```
 
 `verify:rls` создаёт временных пользователей, проверяет приватность, заявки, витрину, тир-листы

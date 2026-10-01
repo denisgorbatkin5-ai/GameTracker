@@ -236,8 +236,9 @@ interface FeaturedItem {
 }
 
 /**
- * Store highlights. Runs in the serverless proxy when there is one, and straight in the
- * browser on static hosts - Steam allows cross-origin reads, so both paths work.
+ * Store highlights. Runs in the serverless proxy when there is one, otherwise through the
+ * `steam_fetch` RPC (Postgres + the `http` extension) - a browser cannot call Steam itself
+ * because the store API sends no CORS headers.
  */
 export async function getFeatured(): Promise<FeaturedList> {
   const key = 'featured';

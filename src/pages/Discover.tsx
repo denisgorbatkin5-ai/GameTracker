@@ -31,6 +31,7 @@ export function Discover() {
   useEffect(() => {
     void fetchFeatured()
       .then(setFeatured)
+      .catch(() => setFeatured(null))
       .finally(() => setLoadingFeatured(false));
   }, []);
 
