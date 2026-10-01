@@ -3,9 +3,13 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 import { steamApiPlugin } from './plugins/steamApiPlugin';
+import { spaFallbackPlugin } from './plugins/spaFallbackPlugin';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), steamApiPlugin()],
+  // Vercel serves from the root; static hosts (GitHub Pages) live under a subpath,
+  // which the deploy workflow passes through VITE_BASE_PATH.
+  base: process.env.VITE_BASE_PATH ?? '/',
+  plugins: [react(), tailwindcss(), steamApiPlugin(), spaFallbackPlugin()],
   resolve: {
     alias: {
       '@': path.resolve(process.cwd(), 'src'),

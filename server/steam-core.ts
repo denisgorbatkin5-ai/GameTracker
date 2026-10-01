@@ -24,6 +24,13 @@ export interface SteamGame {
 
 const SEARCH_URL = 'https://store.steampowered.com/api/storesearch/';
 const DETAILS_URL = 'https://store.steampowered.com/api/appdetails';
+const FEATURED_URL = 'https://store.steampowered.com/api/featuredcategories';
+
+export interface FeaturedList {
+  topSellers: { appid: number; name: string; header: string }[];
+  specials: { appid: number; name: string; header: string }[];
+  newReleases: { appid: number; name: string; header: string }[];
+}
 
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
@@ -219,4 +226,49 @@ export async function getAppDetails(appid: number): Promise<SteamGame | null> {
     platforms,
   };
   return remember(key, game);
+}
+
+interface FeaturedItem {
+  id?: number;
+  name?: string;
+  header_image?: string;
+  large_capsule_image?: string;
+}
+
+/**
+ * Store highlights. Runs in the serverless proxy when there is one, and straight in the
+ * browser on static hosts - Steam allows cross-origin reads, so both paths work.
+ */
+export async function getFeatured(): Promise<FeaturedList> {
+  const key = 'featured';
+  const cached = recall<FeaturedList>(key);
+  if (cached) return cached;
+
+  const json = (await fetchJson(`${FEATURED_URL}?cc=us&l=english`)) as Record<string, unknown>;
+
+  const extract = (group: string): { appid: number; name: string; header: string }[] => {
+    const bucket = json[group] as { items?: FeaturedItem[] } | undefined;
+    if (!bucket?.items) return [];
+    const seen = new Set<number>();
+    const list: { appid: number; name: string; header: string }[] = [];
+    for (const item of bucket.items) {
+      const appid = Number(item.id);
+      if (!Number.isFinite(appid) || appid <= 0 || seen.has(appid) || !item.name) continue;
+
+      // Steam hosts brand-new assets under hashed paths, so prefer the URLs it gives us
+      // and only fall back to the predictable CDN path for older titles.
+      const header =
+        item.header_image ?? item.large_capsule_image ?? headerImage(appid);
+      seen.add(appid);
+      list.push({ appid, name: item.name, header });
+      if (list.length >= 18) break;
+    }
+    return list;
+  };
+
+  return remember(key, {
+    topSellers: extract('top_sellers'),
+    specials: extract('specials'),
+    newReleases: extract('new_releases'),
+  });
 }
