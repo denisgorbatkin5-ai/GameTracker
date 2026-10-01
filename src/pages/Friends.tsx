@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Check, Clock, Search, UserMinus, UserPlus, Users, X } from 'lucide-react';
+import { ArrowRight, Check, Clock, Search, UserMinus, UserPlus, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { GameArt } from '../components/games/GameArt';
@@ -326,7 +326,7 @@ function FriendCard({ edge, onRemove }: { edge: Friendship; onRemove: () => void
           rows
             .slice()
             .sort((a, b) => (b.hours_played ?? 0) - (a.hours_played ?? 0))
-            .slice(0, 4),
+            .slice(0, 6),
         );
       })
       .catch(() => undefined)
@@ -340,6 +340,8 @@ function FriendCard({ edge, onRemove }: { edge: Friendship; onRemove: () => void
 
   const person = edge.profile;
   if (!person) return null;
+
+  const hours = peek.reduce((sum, item) => sum + (item.hours_played ?? 0), 0);
 
   return (
     <motion.div
@@ -371,34 +373,44 @@ function FriendCard({ edge, onRemove }: { edge: Friendship; onRemove: () => void
 
       {person.bio ? <p className="relative mt-3 line-clamp-2 text-xs text-slate-400">{person.bio}</p> : null}
 
-      <div className="relative mt-3 flex gap-1.5">
+      <div className="relative mt-3 grid grid-cols-6 gap-1">
         {loadingPeek
-          ? Array.from({ length: 4 }).map((_, index) => (
-              <Skeleton key={index} className="h-9 flex-1 rounded-md" />
+          ? Array.from({ length: 6 }).map((_, index) => (
+              <Skeleton key={index} className="h-9 rounded-md" />
             ))
           : peek.map((item) => (
-              <Link
+              <div
                 key={item.id}
-                to={`/u/${person.username}`}
                 title={item.game.name}
-                className="block h-9 min-w-0 flex-1 overflow-hidden rounded-md"
+                className="h-9 overflow-hidden rounded-md"
               >
                 <GameArt
                   appid={item.game.steam_appid}
                   src={item.game.header_image}
                   alt={item.game.name}
                   className="size-full"
+                  rounded="rounded-md"
                 />
-              </Link>
+              </div>
             ))}
+        {!loadingPeek && peek.length === 0 ? (
+          <p className="col-span-6 text-[11px] text-slate-600">Коллекция пока пуста</p>
+        ) : null}
       </div>
 
-      <Link
-        to={`/u/${person.username}`}
-        className="relative mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-violet-300 transition hover:text-violet-200"
-      >
-        Открыть профиль
-      </Link>
+      <div className="relative mt-3.5 flex items-center gap-3">
+        <Link
+          to={`/u/${person.username}`}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-300 transition hover:text-violet-200"
+        >
+          Коллекция и витрина <ArrowRight className="size-3.5" />
+        </Link>
+        {!loadingPeek && peek.length > 0 ? (
+          <span className="ml-auto font-mono text-[11px] text-slate-500">
+            {peek.length}+ · {Math.round(hours).toLocaleString('ru-RU')} ч
+          </span>
+        ) : null}
+      </div>
     </motion.div>
   );
 }

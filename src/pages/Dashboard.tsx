@@ -9,11 +9,13 @@ import {
   Sparkles,
   Star,
   Trophy,
+  Users,
   Wand2,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AddGameModal } from '../components/games/AddGameModal';
+import { FriendsWidget } from '../components/friends/FriendsWidget';
 import { GameSearch } from '../components/games/GameSearch';
 import { StatusBadge } from '../components/games/StatusBadge';
 import { GameArt } from '../components/games/GameArt';
@@ -123,6 +125,11 @@ export function Dashboard() {
         description="Сводка по твоей библиотеке: статусы, часы, рейтинги и любимые жанры."
         actions={
           <>
+            <Link to="/friends">
+              <Button variant="secondary" icon={<Users className="size-4" />}>
+                Друзья
+              </Button>
+            </Link>
             <Link to="/discover">
               <Button variant="secondary" icon={<Plus className="size-4" />}>
                 Добавить игру
@@ -296,6 +303,8 @@ export function Dashboard() {
             </Card>
 
             <div className="space-y-4">
+              <FriendsWidget />
+
               <Card>
                 <h2 className="font-display mb-4 text-lg font-semibold text-white">Недавние</h2>
                 <div className="space-y-1">

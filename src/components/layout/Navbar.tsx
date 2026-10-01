@@ -13,6 +13,7 @@ const LINKS = [
   { to: '/discover', label: 'Поиск', icon: Plus },
   { to: '/collection', label: 'Коллекция', icon: Library },
   { to: '/tier-lists', label: 'Тир-листы', icon: Trophy },
+  { to: '/friends', label: 'Друзья', icon: Users },
 ];
 
 export function Navbar() {
@@ -75,6 +76,11 @@ export function Navbar() {
                     />
                   ) : null}
                   <span className="relative">{link.label}</span>
+                  {link.to === '/friends' && incoming.length > 0 ? (
+                    <span className="relative ml-1.5 rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                      {incoming.length}
+                    </span>
+                  ) : null}
                 </>
               )}
             </NavLink>
@@ -94,7 +100,7 @@ export function Navbar() {
               </Link>
               <Link
                 to="/friends"
-                className="relative hidden size-9 items-center justify-center rounded-xl border border-white/10 bg-white/4 text-slate-300 transition hover:border-white/20 hover:text-white lg:inline-flex"
+                className="relative hidden size-9 items-center justify-center rounded-xl border border-white/10 bg-white/4 text-slate-300 transition hover:border-white/20 hover:text-white xl:inline-flex"
                 title="Друзья"
               >
                 <Users className="size-4" />
@@ -180,27 +186,13 @@ export function Navbar() {
               >
                 <link.icon className="size-4" />
                 {link.label}
-              </NavLink>
-            ))}
-            {user ? (
-              <NavLink
-                to="/friends"
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition',
-                    isActive ? 'bg-white/8 text-white' : 'text-slate-400 hover:bg-white/5',
-                  )
-                }
-              >
-                <Users className="size-4" />
-                Друзья
-                {incoming.length > 0 ? (
+                {link.to === '/friends' && incoming.length > 0 ? (
                   <span className="ml-auto rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-black">
                     {incoming.length}
                   </span>
                 ) : null}
               </NavLink>
-            ) : null}
+            ))}
           </div>
         </motion.nav>
       ) : null}

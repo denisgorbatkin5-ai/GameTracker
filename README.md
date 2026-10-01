@@ -1,22 +1,94 @@
 # GameTracker
 
-Трекер игровой коллекции: отмечай пройденные игры, создавай свои категории и собирай tier-листы drag & drop. Данные об играх — из Steam, хранение — Supabase.
+<p align="center">
+  <b>Трекер игровой коллекции</b> — отмечай пройденные игры, собирай категории, создавай tier-листы drag & drop
+  и делись коллекцией с друзьями по ссылке или прямо из своей вкладки «Друзья».
+</p>
 
-## Стек
+<p align="center">
+  <a href="https://denisgorbatkin5-ai.github.io/GameTracker/"><b>🌐 Демо</b></a>
+  ·
+  <a href="#возможности"><b>Возможности</b></a>
+  ·
+  <a href="#архитектура"><b>Архитектура</b></a>
+  ·
+  <a href="#быстрый-старт"><b>Быстрый старт</b></a>
+  ·
+  <a href="#безопасность"><b>Безопасность</b></a>
+</p>
 
-- **Vite 7** + **React 19** + **TypeScript**
-- **Tailwind CSS v4** (aurora-дизайн, glassmorphism, тёмная тема)
-- **Supabase** — Postgres, Auth (email/password), RLS, RPC
-- **dnd-kit** — drag & drop в конструкторе тир-листов
-- **framer-motion** — анимации
-- **Vercel** — деплой (SPA + serverless-прокси к Steam API)
+<p align="center">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 19" />
+  <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Vite-7-646CFF?style=flat-square&logo=vite&logoColor=white" alt="Vite" />
+  <img src="https://img.shields.io/badge/Tailwind-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" />
+  <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=flat-square&logo=supabase&logoColor=black" alt="Supabase" />
+  <img src="https://img.shields.io/badge/license-MIT-22d3ee?style=flat-square" alt="MIT License" />
+</p>
+
+---
+
+## Что это
+
+Сервис, где игрок ведёт свою библиотеку: статус игры, оценка, часы, личные заметки, категории
+(«Пройти», «На_ум», «Купить») и рейтинг игр в формате tier-листа. Данные об играх подтягиваются из
+Steam, аккаунты и синхронизация — Supabase.
+
+Ключевая деталь проекта — **друзья с приватностью по умолчанию**: коллекция закрыта от всех, кроме
+друзей, а друзей не нужно искать по ссылкам — есть отдельная вкладка с заявками и быстрым переходом
+в коллекцию друга.
+
+## Возможности
+
+| | |
+| --- | --- |
+| **Коллекция** | статусы (играю / пройдено / брошено / в планах), оценка 1–10, часы, заметки, дата финала |
+| **Категории** | свои категории с drag & drop сортировкой |
+| **Tier-листы** | конструктор drag & drop (dnd-kit), S→F ранги, режимы public / только для друзей / приватный |
+| **Друзья** | заявка по нику, входящие/исходящие, accept / reject / удалить, виджет «Друзья» прямо в дашборде |
+| **Витрина профиля** | до 6 игр из своей коллекции, сортируются в одну секунду |
+| **Steam-поиск** | поиск по русским и английским названиям, топы продаж / скидок / новинок |
+| **PWA-ready** | тёмная aurora-тема, glassmorphism, адаптив от мобилки до десктопа |
+
+## Архитектура
+
+```
+React SPA (Vite, TS, Tailwind)
+├── useAuth / useLibrary / useFriends        — состояние на контекстах
+├── lib/api.ts                              — Supabase + SQL RPC
+└── lib/steam.ts                            — proxy-first, direct Steam fallback
+
+Postgres / Supabase
+├── RLS: коллекция и категории — только владелец
+├── RLS: тир-листы — владелец + все (если is_public / friends_visible)
+└── security-definer RPC                    — can_view_profile, profile_collection,
+                                              profile_showcase_games, add_friend,
+                                              respond_friend, username_available
+
+Steam Web API
+└── server/steam-core.ts                    — общая логика + кэш в памяти 30 мин
+    ├── plugins/steamApiPlugin.ts           — dev-прокси
+    └── api/steam.ts                        — serverless-прокси (Vercel)
+```
+
+Ключевое решение: чужие данные **никогда** не читаются напрямую из таблиц (они под owner-only RLS) —
+только через `security-definer` RPC, который сам решает, есть ли у зрителя право на просмотр.
+
+## Скриншоты
+
+![Главная](docs/landing.png)
+
+> Кадры дашборда, тир-листа и вкладки «Друзья» добавятся сюда же:
+> `docs/dashboard.png`, `docs/tier-list.png`, `docs/friends.png`.
 
 ## Быстрый старт
 
 ```bash
+git clone https://github.com/denisgorbatkin5-ai/GameTracker.git
+cd GameTracker
 npm install
-cp .env.example .env   # заполни VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY
-npm run dev            # http://localhost:5173
+cp .env.example .env        # заполни VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY
+npm run dev                 # http://localhost:5173
 ```
 
 ## Переменные окружения
@@ -26,74 +98,79 @@ npm run dev            # http://localhost:5173
 | `VITE_SUPABASE_URL` | URL проекта Supabase |
 | `VITE_SUPABASE_ANON_KEY` | anon public ключ |
 | `SUPABASE_PROJECT_REF` | ref проекта (для миграций) |
-| `SUPABASE_DB_PASSWORD` | пароль БД (только для миграций, не попадает в клиент) |
-| `SUPABASE_DB_REGION` | регион пула, например `eu-west-2` (по умолчанию) |
+| `SUPABASE_DB_PASSWORD` | пароль БД (только для миграций, в клиент не попадает) |
+| `SUPABASE_DB_REGION` | регион connection pooler, по умолчанию `eu-west-2` |
+
+`.env` в `.gitignore`, наружу попадает только anon-ключ.
 
 ## База данных
 
-Схема лежит в [`supabase/schema.sql`](supabase/schema.sql). Применить можно двумя способами:
+Схема — [`supabase/schema.sql`](supabase/schema.sql):
 
 ```bash
-# 1) автоматически (через pg + connection pooler)
-npm run migrate
-
-# 2) вручную: Supabase Dashboard → SQL Editor → вставить supabase/schema.sql
+npm run migrate    # применить автоматически через pg + connection pooler
+# или вручную: Supabase Dashboard → SQL Editor → вставить supabase/schema.sql
 ```
 
-Что создаётся:
+Создаётся: `profiles`, `games` (кэш Steam), `collection_items`, `categories` / `category_items`,
+`tier_lists` / `tier_rows` / `tier_items`, `friendships`, `profile_showcase` + RLS-политики.
 
-- `profiles` — публичные профили (триггер `on_auth_user_created` создаёт профиль при регистрации; ник 3–20 символов `[A-Za-z0-9_]`, уникален без учёта регистра)
-- `games` — общий кэш метаданных Steam (`upsert_games(jsonb)`)
-- `collection_items` — записи коллекции: статус, оценка, часы, заметки, дата финала
-- `categories` / `category_items` — пользовательские категории
-- `tier_lists` / `tier_rows` / `tier_items` — тир-листы (`save_tier_list(bigint, jsonb)` сохраняет всё атомарно)
-- `friendships` — заявки и дружба (`pending` → `accepted`), одна строка на пару
-- `profile_showcase` — витрина профиля: до 6 игр из коллекции с позицией
-- RLS-политики: коллекция и категории видны только владельцу, тир-листы — владельцу и всем, если `is_public`
-
-### Друзья, приватность и витрина
-
-Ключевая идея: **приватность не ломается от того, что ты добавил друга**. Поэтому чтение чужих
-данных идёт не через таблицы (они под owner-only RLS), а через security-definer RPC, которые сами
-проверяют, имеет ли зритель право:
+### Друзья и приватность
 
 | RPC | Что делает |
 | --- | --- |
 | `username_available(text)` | проверка ника для формы регистрации |
-| `add_friend(text)` | отправить заявку по нику; если заявка уже есть — сразу `accepted` |
-| `respond_friend(bigint, boolean)` | принять/отклонить (принять может только получатель), отозвать свою |
-| `can_view_profile(uuid)` | профиль виден, если он публичный или мы друзья |
-| `profile_collection(text)` | коллекция (личные `notes` никогда не отдаются) |
-| `profile_showcase_games(text)` | витрина с играми |
+| `add_friend(text)` | заявка по нику; повторная заявка сразу превращается в `accepted` |
+| `respond_friend(bigint, boolean)` | принять / отклонить (принять может только получатель) / отозвать |
+| `can_view_profile(uuid)` | профиль виден, если публичный или вы друзья |
+| `profile_collection(text)` | коллекция друга; личные `notes` не отдаются никогда |
+| `profile_showcase_games(text)` | витрина друга |
 
-Приватный профиль и коллекция видны принятым друзьям; тир-лист — только если у него включён
-`friends_visible` (переключатель в шапке конструктора тир-листов).
+Приватный профиль и коллекция видны только принятым друзьям. Тир-лист — только если у автора включён
+`friends_visible`. Заявки нельзя принять дважды, нельзя задублировать и нельзя выдать себе дружбу.
 
 ## Steam API
 
-Steam не отдаёт CORS-заголовки, поэтому запросы идут через прокси:
+Steam не отдаёт CORS-заголовки, поэтому запросы идут через прокси, а если его нет (статический хостинг) —
+напрямую с клиента:
 
-- локально — middleware-плагин `plugins/steamApiPlugin.ts`
-- на Vercel — serverless-функция `api/steam.ts`
+- локально — `plugins/steamApiPlugin.ts`
+- на Vercel — serverless `api/steam.ts`
+- на GitHub Pages — прямые запросы к Steam из `src/lib/steam.ts`
 
-Оба используют общую логику `server/steam-core.ts` с кэшем в памяти (30 мин).
+Общая логика и кэш в памяти (30 мин) — `server/steam-core.ts`.
 
 | Endpoint | Назначение |
 | --- | --- |
-| `GET /api/steam/search?q=` | поиск по названию (русский + английский, оба результата) |
+| `GET /api/steam/search?q=` | поиск по названию (русский + английский) |
 | `GET /api/steam/app?id=` | метаданные игры |
 | `GET /api/steam/apps?ids=1,2,3` | пачка метаданных (до 40) |
 | `GET /api/steam/featured` | топ продаж / скидки / новинки |
 
-## Деплой на Vercel
+## Тесты и проверки
 
 ```bash
-npm i -g vercel
-vercel          # preview
-vercel --prod   # production
+npm run build       # tsc -b + production-сборка
+npm run verify:rls  # 40 проверок RLS/RPC на живой базе
 ```
 
-В `vercel.json` уже настроен rewrite всех маршрутов на `index.html` (SPA), при этом `/api/*` не перехватывается. В Variable Encryption добавь те же `VITE_*` переменные.
+`verify:rls` создаёт временных пользователей, проверяет приватность, заявки, витрину, тир-листы
+и правила ника, после чего сам себя чистит — можно запускать повторно.
+
+## Деплой
+
+**GitHub Pages** (используется как основной, `.github/workflows/pages.yml`): base path берётся из
+имени репозитория, SPA-маршруты закрываются файлом `404.html`.
+
+**Vercel** (`vercel.json`): rewrite всех маршрутов на `index.html`, `/api/*` не перехватывается.
+Нужны те же `VITE_*` переменные в Variable Encryption.
+
+## Безопасность
+
+- Row Level Security на всех пользовательских таблицах; тесты в CI-стиле `npm run verify:rls`.
+- `notes`, категории и коллекция читаются только владельцем.
+- Секреты не попадают в клиент и репозиторий; используется anon-ключ.
+- Регистрация требует уникальный ник, проверяется и на клиенте, и на сервере (триггер + RPC).
 
 ## Команды
 
@@ -102,5 +179,9 @@ npm run dev         # dev-сервер с Steam-прокси
 npm run build       # tsc -b + production-сборка
 npm run preview     # предпросмотр сборки
 npm run migrate     # применить supabase/schema.sql
-npm run verify:rls  # 28 проверок RLS/RPC на живой базе (тестовые юзеры удаляются)
+npm run verify:rls  # 40 проверок RLS/RPC (тестовые юзеры удаляются)
 ```
+
+## Лицензия
+
+MIT © [denisgorbatkin5-ai](https://github.com/denisgorbatkin5-ai)
