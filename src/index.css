@@ -1,0 +1,198 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-void: #06060c;
+  --color-ink: #0a0a12;
+  --color-panel: #101020;
+  --color-edge: #1e1e33;
+
+  --color-violet-brand: #8b5cf6;
+  --color-cyan-brand: #22d3ee;
+  --color-pink-brand: #f472b6;
+  --color-lime-brand: #a3e635;
+  --color-amber-brand: #fbbf24;
+  --color-rose-brand: #fb7185;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  * {
+    border-color: color-mix(in oklab, var(--color-edge) 80%, transparent);
+  }
+
+  html {
+    scrollbar-gutter: stable;
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--color-void);
+    color: #e6e6f0;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-violet-brand) 55%, transparent);
+    color: #fff;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  button:focus-visible,
+  a:focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--color-cyan-brand) 75%, transparent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .glass {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in oklab, #ffffff 5%, transparent),
+        color-mix(in oklab, #ffffff 1.5%, transparent)
+      ),
+      color-mix(in oklab, var(--color-ink) 88%, transparent);
+    backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid color-mix(in oklab, var(--color-edge) 90%, transparent);
+  }
+
+  .surface {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklab, #15152a 92%, transparent),
+      color-mix(in oklab, #0c0c18 92%, transparent)
+    );
+    border: 1px solid var(--color-edge);
+  }
+
+  .text-gradient {
+    background: linear-gradient(
+      100deg,
+      #fff 0%,
+      #c4b5fd 38%,
+      #67e8f9 70%,
+      #f9a8d4 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .ring-glow {
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--color-violet-brand) 35%, transparent),
+      0 12px 40px -12px color-mix(in oklab, var(--color-violet-brand) 55%, transparent);
+  }
+
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-edge) transparent;
+  }
+
+  .scroll-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--color-edge) 90%, transparent);
+    border-radius: 999px;
+  }
+
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@keyframes aurora {
+  0% {
+    transform: translate3d(-10%, 0, 0) scale(1.1);
+  }
+  50% {
+    transform: translate3d(10%, -5%, 0) scale(1.25);
+  }
+  100% {
+    transform: translate3d(-10%, 0, 0) scale(1.1);
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+.animate-aurora {
+  animation: aurora 22s ease-in-out infinite;
+}
+
+.animate-float {
+  animation: float-slow 7s ease-in-out infinite;
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in oklab, #16162a 90%, transparent);
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, #ffffff 7%, transparent),
+    transparent
+  );
+  animation: shimmer 1.6s infinite;
+}
